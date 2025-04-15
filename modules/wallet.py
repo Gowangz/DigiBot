@@ -1,7 +1,8 @@
-from typing import Union
+from typing import Union, Dict, Any
+import json
 import time
-import random
-import string
+from datetime import datetime
+from os import environ
 
 from telebot.types import (
     Message,
@@ -11,385 +12,105 @@ from telebot.types import (
 )
 
 from _bot import bot
-from utils.multiuser_db import UsersDB, TransactionsDB
-from modules.register import check_auth
-from .payment_gateway import initiate_payment, check_payment_status
+from utils.multiuser_db import UsersDB
+from modules.auth import check_auth
+from modules.payment_gateway import create_payment, check_payment_status, register_payment_callback
 
-
-def wallet(d: Union[Message, CallbackQuery], data: dict = None):
-    """Handle menu wallet."""
+def wallet(d: Union[Message, CallbackQuery], data: dict = None) -> None:
+    """Main wallet handler function that routes to appropriate functions."""
     data = data or {}
     next_func = data.get('nf', ['show_wallet'])[0]
     
-    if not check_auth(d.from_user.id):
-        bot.send_message(
-            text='❌ Anda belum terdaftar. Silakan lakukan pendaftaran terlebih dahulu.',
-            chat_id=d.from_user.id
-        )
-        from .register import register
-        register(d)
-        return
-    
-    if next_func in globals():
-        data.pop('nf', None)
-        args = [d]
-        if len(data.keys()) > 0:
-            args.append(data)
+    if next_func == 'show_wallet':
+        show_wallet(d)
+    elif next_func == 'show_history':
+        show_history(d)
+    elif next_func == 'topup':
+        handle_topup(d)
+    elif next_func == 'topup_options':
+        show_topup_options(d)
+    elif next_func == 'process_topup':
+        amount = int(data.get('amount', [0])[0])
+        process_topup(d, amount)
 
-        globals()[next_func](*args)
-
-
-def show_wallet(d: Union[Message, CallbackQuery]):
-    """Menampilkan informasi wallet pengguna."""
+def show_wallet(d: Union[Message, CallbackQuery]) -> None:
+    """Show wallet menu and balance."""
     user_id = d.from_user.id
     
     try:
-        user = UsersDB().get_by_id(user_id)
-        if not user:
-            raise Exception("Pengguna tidak ditemukan")
+        db = UsersDB()
+        balance = db.get_balance(user_id)
         
-        balance = user.get('balance', 0)
-        
-        # Ambil 5 transaksi terakhir
-        transactions = TransactionsDB().get_by_user(user_id)
-        transactions.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
-        recent_transactions = transactions[:5]
-        
-        # Buat pesan
-        t = f'<b>💰 Wallet</b>\n\n' \
-            f'Saldo Anda: <b>Rp {balance:,.0f}</b>\n\n'
-        
-        if recent_transactions:
-            t += '<b>Transaksi Terakhir:</b>\n'
-            for tx in recent_transactions:
-                amount = tx.get('amount', 0)
-                tx_type = tx.get('type', '')
-                timestamp = tx.get('timestamp', '')
-                
-                # Format sesuai jenis transaksi
-                if tx_type == 'topup':
-                    t += f'📥 <b>+Rp {amount:,.0f}</b> - {timestamp}\n'
-                elif tx_type == 'purchase':
-                    t += f'📤 <b>-Rp {abs(amount):,.0f}</b> - {timestamp}\n'
-                else:
-                    t += f'🔄 <b>Rp {amount:,.0f}</b> - {tx_type} - {timestamp}\n'
+        t = '<b>💰 Wallet</b>\n\n' \
+            f'Saldo: <b>Rp {balance:,.0f}</b>'
             
-            t += '\n'
-        
-        # Buat markup
-        markup = InlineKeyboardMarkup(row_width=2)
-        markup.add(
+        markup = InlineKeyboardMarkup()
+        markup.row(
             InlineKeyboardButton(
-                text='💵 Top Up',
+                text='💳 Top Up',
                 callback_data='wallet?nf=topup_options'
             ),
             InlineKeyboardButton(
-                text='📋 Histori Lengkap',
+                text='📋 Riwayat',
                 callback_data='wallet?nf=show_history'
-            ),
-        )
-        
-        markup.row(
-            InlineKeyboardButton(
-                text='⬅️ Kembali ke Menu',
-                callback_data='start'
             )
         )
         
-        # Kirim pesan
         if isinstance(d, Message):
             bot.send_message(
-                text=t,
                 chat_id=user_id,
+                text=t,
                 reply_markup=markup,
                 parse_mode='HTML'
             )
         else:  # CallbackQuery
-            bot.edit_message_text(
-                text=t,
-                chat_id=user_id,
-                message_id=d.message.message_id,
-                reply_markup=markup,
-                parse_mode='HTML'
-            )
-            
-    except Exception as e:
-        error_msg = f'❌ Terjadi kesalahan: {str(e)}'
-        
-        if isinstance(d, Message):
-            bot.send_message(
-                text=error_msg,
-                chat_id=user_id
-            )
-        else:  # CallbackQuery
-            bot.answer_callback_query(
-                callback_query_id=d.id,
-                text=error_msg,
-                show_alert=True
-            )
-
-
-def topup_options(call: CallbackQuery):
-    """Menampilkan opsi nominal top up."""
-    user_id = call.from_user.id
-    
-    t = '<b>💵 Top Up Wallet</b>\n\n' \
-        'Silakan pilih nominal top up:'
-    
-    # Opsi nominal top up
-    options = [
-        ('Rp 50.000', 50000),
-        ('Rp 100.000', 100000),
-        ('Rp 200.000', 200000),
-        ('Rp 500.000', 500000),
-        ('Rp 1.000.000', 1000000),
-    ]
-    
-    markup = InlineKeyboardMarkup(row_width=2)
-    buttons = []
-    
-    for label, amount in options:
-        buttons.append(
-            InlineKeyboardButton(
-                text=label,
-                callback_data=f'wallet?nf=process_topup&amount={amount}'
-            )
-        )
-    
-    markup.add(*buttons)
-    markup.row(
-        InlineKeyboardButton(
-            text='🔢 Nominal Lain',
-            callback_data='wallet?nf=custom_topup'
-        )
-    )
-    markup.row(
-        InlineKeyboardButton(
-            text='⬅️ Kembali',
-            callback_data='wallet?nf=show_wallet'
-        )
-    )
-    
-    bot.edit_message_text(
-        text=t,
-        chat_id=user_id,
-        message_id=call.message.message_id,
-        reply_markup=markup,
-        parse_mode='HTML'
-    )
-
-
-def custom_topup(call: CallbackQuery):
-    """Menangani top up dengan nominal kustom."""
-    user_id = call.from_user.id
-    
-    t = '<b>💵 Top Up Wallet</b>\n\n' \
-        'Silakan masukkan nominal top up (dalam Rupiah, minimal Rp 10.000):\n\n' \
-        'Contoh: 75000 untuk Rp 75.000\n\n' \
-        '/cancel untuk membatalkan'
-    
-    msg = bot.edit_message_text(
-        text=t,
-        chat_id=user_id,
-        message_id=call.message.message_id,
-        parse_mode='HTML'
-    )
-    
-    bot.register_next_step_handler(msg, process_custom_topup)
-
-
-def process_custom_topup(m: Message):
-    """Memproses jumlah top up kustom dari input pengguna."""
-    user_id = m.from_user.id
-    
-    if m.text == '/cancel':
-        wallet(m, {'nf': ['show_wallet']})
-        return
-    
-    try:
-        amount = int(m.text.strip())
-        
-        if amount < 10000:
-            raise ValueError("Minimal top up Rp 10.000")
-        
-        process_topup(m, {'amount': [str(amount)]})
-        
-    except ValueError as e:
-        bot.send_message(
-            text=f'❌ Input tidak valid: {str(e)}',
-            chat_id=user_id
-        )
-        # Kirim kembali menu top up
-        wallet(m, {'nf': ['topup_options']})
-
-
-def process_topup(d: Union[Message, CallbackQuery], data: dict):
-    """Memproses top up dengan nominal yang dipilih."""
-    user_id = d.from_user.id
-    amount = int(data.get('amount', [0])[0])
-    
-    if amount <= 0:
-        # Jika nominal tidak valid
-        bot.send_message(
-            text='❌ Nominal top up tidak valid.',
-            chat_id=user_id
-        )
-        return wallet(d, {'nf': ['topup_options']})
-    
-    # Buat referensi ID untuk transaksi
-    reference_id = generate_reference_id()
-    
-    # Inisiasi pembayaran
-    payment_url, status = initiate_payment(user_id, amount, reference_id)
-    
-    if not status:
-        # Jika gagal memulai pembayaran
-        bot.send_message(
-            text='❌ Gagal memulai proses pembayaran. Silakan coba lagi nanti.',
-            chat_id=user_id
-        )
-        return wallet(d, {'nf': ['show_wallet']})
-    
-    # Kirim instruksi pembayaran
-    t = f'<b>💵 Top Up Rp {amount:,.0f}</b>\n\n' \
-        f'ID Transaksi: <code>{reference_id}</code>\n\n' \
-        f'Status: <b>Menunggu Pembayaran</b>\n\n' \
-        f'Silakan lakukan pembayaran melalui link berikut:\n' \
-        f'<a href="{payment_url}">Link Pembayaran</a>\n\n' \
-        f'Saldo akan otomatis ditambahkan setelah pembayaran selesai.'
-    
-    markup = InlineKeyboardMarkup(row_width=2)
-    markup.add(
-        InlineKeyboardButton(
-            text='🔄 Cek Status',
-            callback_data=f'wallet?nf=check_payment&ref={reference_id}'
-        )
-    )
-    markup.row(
-        InlineKeyboardButton(
-            text='⬅️ Kembali ke Wallet',
-            callback_data='wallet?nf=show_wallet'
-        )
-    )
-    
-    if isinstance(d, Message):
-        bot.send_message(
-            text=t,
-            chat_id=user_id,
-            reply_markup=markup,
-            parse_mode='HTML',
-            disable_web_page_preview=True
-        )
-    else:  # CallbackQuery
-        bot.edit_message_text(
-            text=t,
-            chat_id=user_id,
-            message_id=d.message.message_id,
-            reply_markup=markup,
-            parse_mode='HTML',
-            disable_web_page_preview=True
-        )
-
-
-def check_payment(call: CallbackQuery, data: dict):
-    """Memeriksa status pembayaran."""
-    user_id = call.from_user.id
-    reference_id = data.get('ref', [''])[0]
-    
-    if not reference_id:
-        bot.answer_callback_query(
-            callback_query_id=call.id,
-            text='❌ ID Referensi tidak valid.',
-            show_alert=True
-        )
-        return
-    
-    # Periksa status pembayaran
-    status, amount = check_payment_status(reference_id)
-    
-    if status == 'completed':
-        # Jika pembayaran berhasil, tambahkan saldo
-        try:
-            new_balance = UsersDB().update_balance(user_id, amount)
-            
-            t = f'<b>✅ Pembayaran Berhasil!</b>\n\n' \
-                f'ID Transaksi: <code>{reference_id}</code>\n' \
-                f'Jumlah: <b>Rp {amount:,.0f}</b>\n' \
-                f'Saldo Baru: <b>Rp {new_balance:,.0f}</b>\n\n' \
-                f'Terima kasih atas top up Anda.'
-            
-            markup = InlineKeyboardMarkup()
-            markup.row(
-                InlineKeyboardButton(
-                    text='⬅️ Kembali ke Wallet',
-                    callback_data='wallet?nf=show_wallet'
+            try:
+                bot.edit_message_text(
+                    text=t,
+                    chat_id=user_id,
+                    message_id=d.message.message_id,
+                    reply_markup=markup,
+                    parse_mode='HTML'
                 )
-            )
-            
-            bot.edit_message_text(
-                text=t,
-                chat_id=user_id,
-                message_id=call.message.message_id,
-                reply_markup=markup,
-                parse_mode='HTML'
-            )
-            
-        except Exception as e:
-            bot.answer_callback_query(
-                callback_query_id=call.id,
-                text=f'❌ Terjadi kesalahan: {str(e)}',
-                show_alert=True
-            )
-    
-    elif status == 'pending':
-        # Jika masih pending
-        bot.answer_callback_query(
-            callback_query_id=call.id,
-            text='⏳ Pembayaran masih dalam proses. Silakan coba cek kembali beberapa saat lagi.',
-            show_alert=True
-        )
-    
-    else:
-        # Jika gagal atau status lainnya
-        bot.answer_callback_query(
-            callback_query_id=call.id,
-            text=f'❌ Status pembayaran: {status}. Silakan hubungi admin jika Anda sudah melakukan pembayaran.',
-            show_alert=True
+            except:
+                bot.send_message(
+                    chat_id=user_id,
+                    text=t,
+                    reply_markup=markup,
+                    parse_mode='HTML'
+                )
+                
+    except Exception as e:
+        bot.send_message(
+            chat_id=user_id,
+            text=f'❌ Terjadi kesalahan: {str(e)}'
         )
 
-
-def show_history(call: CallbackQuery):
-    """Menampilkan histori transaksi lengkap."""
-    user_id = call.from_user.id
+def show_history(d: Union[Message, CallbackQuery]):
+    """Show transaction history."""
+    user_id = d.from_user.id
     
     try:
-        transactions = TransactionsDB().get_by_user(user_id)
-        transactions.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+        db = UsersDB()
+        transactions = db.get_transactions(user_id, limit=10)
         
         if not transactions:
-            t = '<b>📋 Histori Transaksi</b>\n\n' \
-                'Belum ada transaksi.'
+            t = '<b>📋 Riwayat Transaksi</b>\n\n' \
+                'Belum ada riwayat transaksi.'
         else:
-            t = '<b>📋 Histori Transaksi</b>\n\n'
-            
+            t = '<b>📋 Riwayat Transaksi</b>\n\n'
             for tx in transactions:
-                amount = tx.get('amount', 0)
+                tx_time = datetime.fromtimestamp(tx.get('timestamp', 0))
                 tx_type = tx.get('type', '')
-                timestamp = tx.get('timestamp', '')
-                details = tx.get('details', '')
+                tx_amount = tx.get('amount', 0)
+                tx_status = tx.get('status', '')
+                tx_ref = tx.get('ref', '')
                 
-                # Format sesuai jenis transaksi
-                if tx_type == 'topup':
-                    prefix = f'📥 <b>+Rp {amount:,.0f}</b>'
-                elif tx_type == 'purchase':
-                    prefix = f'📤 <b>-Rp {abs(amount):,.0f}</b>'
-                else:
-                    prefix = f'🔄 <b>Rp {amount:,.0f}</b>'
-                
-                t += f'{prefix} - {timestamp}'
-                if details:
-                    t += f' - {details}'
-                t += '\n'
+                t += f'📅 {tx_time.strftime("%d/%m/%Y %H:%M")}\n' \
+                     f'💰 {"+" if tx_type == "topup" else "-"}Rp {tx_amount:,.0f}\n' \
+                     f'📝 Status: {tx_status}\n' \
+                     f'🔗 Ref: {tx_ref}\n' \
+                     f'{"─" * 20}\n\n'
         
         markup = InlineKeyboardMarkup()
         markup.row(
@@ -399,24 +120,214 @@ def show_history(call: CallbackQuery):
             )
         )
         
-        bot.edit_message_text(
-            text=t,
+        if isinstance(d, Message):
+            bot.send_message(
+                text=t,
+                chat_id=user_id,
+                reply_markup=markup,
+                parse_mode='HTML'
+            )
+        else:  # CallbackQuery
+            try:
+                bot.edit_message_text(
+                    text=t,
+                    chat_id=user_id,
+                    message_id=d.message.message_id,
+                    reply_markup=markup,
+                    parse_mode='HTML'
+                )
+            except:
+                bot.send_message(
+                    text=t,
+                    chat_id=user_id,
+                    reply_markup=markup,
+                    parse_mode='HTML'
+                )
+                
+    except Exception as e:
+        bot.send_message(
+            text=f'❌ Terjadi kesalahan: {str(e)}',
+            chat_id=user_id
+        )
+
+def show_topup_options(d: Union[Message, CallbackQuery]):
+    """Show topup amount options."""
+    user_id = d.from_user.id
+    
+    t = '<b>💳 Top Up Saldo</b>\n\n' \
+        'Pilih nominal top up:'
+        
+    amounts = [10000, 20000, 50000, 100000, 200000, 500000]
+    
+    markup = InlineKeyboardMarkup()
+    for i in range(0, len(amounts), 2):
+        row = []
+        for amount in amounts[i:i+2]:
+            row.append(
+                InlineKeyboardButton(
+                    text=f'Rp {amount:,.0f}',
+                    callback_data=f'wallet?nf=process_topup&amount={amount}'
+                )
+            )
+        markup.row(*row)
+    
+    markup.row(
+        InlineKeyboardButton(
+            text='⬅️ Kembali',
+            callback_data='wallet?nf=show_wallet'
+        )
+    )
+    
+    if isinstance(d, Message):
+        bot.send_message(
             chat_id=user_id,
-            message_id=call.message.message_id,
+            text=t,
+            reply_markup=markup,
+            parse_mode='HTML'
+        )
+    else:  # CallbackQuery
+        try:
+            bot.edit_message_text(
+                text=t,
+                chat_id=user_id,
+                message_id=d.message.message_id,
+                reply_markup=markup,
+                parse_mode='HTML'
+            )
+        except:
+            bot.send_message(
+                chat_id=user_id,
+                text=t,
+                reply_markup=markup,
+                parse_mode='HTML'
+            )
+
+def process_topup(d: Union[Message, CallbackQuery], amount: int):
+    """Process topup request and generate payment."""
+    user_id = d.from_user.id
+    
+    try:
+        # Create payment
+        payment_data, error = create_payment(user_id, amount)
+        
+        if error:
+            bot.send_message(
+                chat_id=user_id,
+                text=f'❌ Gagal membuat pembayaran: {error}'
+            )
+            return
+            
+        # Register payment callback
+        register_payment_callback(
+            payment_data['reference_id'],
+            lambda data: handle_payment_success(data, user_id, d.message.message_id if isinstance(d, CallbackQuery) else None)
+        )
+        
+        # Send QR code
+        caption = f'<b>💳 Pembayaran QRIS</b>\n\n' \
+                  f'Nominal: <b>Rp {payment_data["amount"]:,.0f}</b>\n' \
+                  f'Ref ID: <code>{payment_data["reference_id"]}</code>\n\n' \
+                  f'⏳ Menunggu pembayaran...\n' \
+                  f'Pembayaran akan kadaluarsa dalam {payment_data["expire_time"]} menit.'
+                  
+        markup = InlineKeyboardMarkup()
+        markup.row(
+            InlineKeyboardButton(
+                text='⬅️ Kembali ke Wallet',
+                callback_data='wallet?nf=show_wallet'
+            )
+        )
+        
+        bot.send_photo(
+            chat_id=user_id,
+            photo=payment_data['qr_buffer'],
+            caption=caption,
             reply_markup=markup,
             parse_mode='HTML'
         )
         
+        if isinstance(d, CallbackQuery):
+            try:
+                bot.delete_message(
+                    chat_id=user_id,
+                    message_id=d.message.message_id
+                )
+            except:
+                pass
+                
     except Exception as e:
-        bot.answer_callback_query(
-            callback_query_id=call.id,
-            text=f'❌ Terjadi kesalahan: {str(e)}',
-            show_alert=True
+        bot.send_message(
+            chat_id=user_id,
+            text=f'❌ Terjadi kesalahan: {str(e)}'
         )
 
-
-def generate_reference_id():
-    """Menghasilkan ID referensi unik untuk transaksi."""
-    timestamp = int(time.time())
-    random_chars = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-    return f"TX-{timestamp}-{random_chars}"
+def handle_payment_success(payment_data: Dict[str, Any], user_id: int, message_id: int) -> None:
+    """Handle successful payment notification."""
+    try:
+        db = UsersDB()
+        
+        # Update balance
+        new_balance = db.update_balance(user_id, payment_data['amount'])
+        
+        # Add transaction to history
+        transaction = {
+            'type': 'topup',
+            'amount': payment_data['amount'],
+            'status': 'success',
+            'ref': payment_data['payment_details']['ref'],
+            'bank': payment_data['payment_details']['bank'],
+            'buyer': payment_data['payment_details']['buyer']
+        }
+        db.add_transaction(user_id, transaction)
+        
+        # Create success message
+        t = f'<b>✅ Pembayaran Berhasil!</b>\n\n' \
+            f'Jumlah: <b>Rp {payment_data["amount"]:,.0f}</b>\n' \
+            f'Saldo Baru: <b>Rp {new_balance:,.0f}</b>\n\n' \
+            f'Detail Pembayaran:\n' \
+            f'Bank: {payment_data["payment_details"]["bank"]}\n' \
+            f'Ref: {payment_data["payment_details"]["ref"]}\n' \
+            f'Pembayar: {payment_data["payment_details"]["buyer"]}\n\n' \
+            f'Terima kasih atas top up Anda.'
+        
+        markup = InlineKeyboardMarkup()
+        markup.row(
+            InlineKeyboardButton(
+                text='📋 Lihat Riwayat',
+                callback_data='wallet?nf=show_history'
+            )
+        )
+        markup.row(
+            InlineKeyboardButton(
+                text='⬅️ Kembali ke Wallet',
+                callback_data='wallet?nf=show_wallet'
+            )
+        )
+        
+        # Send success notification
+        bot.send_message(
+            chat_id=user_id,
+            text=t,
+            reply_markup=markup,
+            parse_mode='HTML'
+        )
+        
+        # Update QR message if exists
+        if message_id:
+            try:
+                bot.edit_message_caption(
+                    chat_id=user_id,
+                    message_id=message_id,
+                    caption=f'<b>✅ Pembayaran Berhasil!</b>\n\n'
+                           f'Jumlah: <b>Rp {payment_data["amount"]:,.0f}</b>',
+                    reply_markup=markup,
+                    parse_mode='HTML'
+                )
+            except:
+                pass
+                
+    except Exception as e:
+        bot.send_message(
+            chat_id=user_id,
+            text=f'❌ Terjadi kesalahan saat memproses pembayaran: {str(e)}'
+        )

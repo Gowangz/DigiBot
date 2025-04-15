@@ -1,100 +1,135 @@
-# ☁ `Digitalocean-bot`
+# DigiBot - Digital Ocean VPS Management Bot
 
-![](.README.MD_images/1be8fb97.png)
+A Telegram bot for managing DigitalOcean VPS instances with integrated payment system and multi-user support.
 
-### 🚚 Telegram Bot untuk Digital Ocean dengan Multi-User dan Auto Order
+## Features
 
-### 🔖 Fungsi Utama
+### User Features
+- 💰 Wallet System
+  - Check balance
+  - Top up via QRIS
+  - Transaction history
 
-+ Mengelola akun Digital Ocean, memeriksa saldo akun, dan melakukan pengujian akun dalam batch dengan cepat dan akurat.
-+ Membuat dan mengelola mesin virtual dengan mudah dan efisien, memberikan Anda kendali penuh atas infrastruktur cloud Anda.
-+ Sistem multi-user dengan pendaftaran pengguna, wallet, dan auto order VPS berdasarkan saldo.
-+ Fitur payment gateway (simulasi) untuk top-up saldo secara otomatis.
-+ Panel admin untuk mengelola pengguna dan melihat transaksi.
+- 🖥️ VPS Management
+  - Auto order VPS
+  - Multiple VPS specifications available
+  - Real-time VPS status monitoring
 
-### 🪂 Lingkungan
+### Admin Features
+- 👥 User Management
+  - View registered users
+  - Manage user permissions
+  - Monitor user transactions
 
-+ Bot ini dirancang untuk bekerja di berbagai lingkungan, memastikan fleksibilitas dan kompatibilitas yang tinggi.
-+ Mendukung mode single-user (hanya admin) atau multi-user sesuai konfigurasi.
+- 🔧 DigitalOcean Integration
+  - Add/manage DO accounts
+  - Create droplets
+  - Monitor droplet status
+  - Batch test accounts
 
-### 😻 Tahapan Penggunaan
+- 💲 Price Management
+  - Set VPS prices
+  - Dynamic pricing support
+  - Price history tracking
 
-1. **Clone Proyek**: `git clone` proyek ini ke lokal untuk memulai petualangan Anda.
-2. **Instal Ketergantungan**: Jalankan `pip3 install -r requirements.txt` untuk menginstal ketergantungan yang diperlukan dan pastikan semuanya siap.
-3. **Buat Bot**: Buat bot baru melalui [@botfather](https://t.me/botfather) dan catat `token` yang diberikan untuk menghubungkan bot Anda.
-4. **Edit Konfigurasi**: Edit file `config.json` untuk mengisi konfigurasi yang relevan dengan akun Anda dan sesuaikan dengan kebutuhan Anda.
-   ```json
-   {
-     "BOT": {
-       "NAME": "NAMA STORE",
-       "TOKEN": "BOT TOKEN",
-       "ADMINS": [ID TELEGRAM ADMIN],
-       "PAYMENT_CONFIG": {
-         "CALLBACK_URL": "https://your-callback-url.com/payment/webhook",
-         "USE_SIMULATION": true,
-         "CURRENCY": "IDR"
-       },
-       "MULTI_USER": true
-     }
-   }
-   ```
-5. **Jalankan Bot**: Jalankan `python3 main.py` untuk memulai bot dan nikmati kemudahan pengelolaan Digital Ocean Anda dengan antarmuka yang ramah pengguna!
+## Setup
 
-### 📋 Perintah dan Fitur
+### Prerequisites
+- Python 3.8+
+- Telegram Bot Token
+- DigitalOcean API Key
+- QRIS Payment Gateway Account
 
-#### Perintah untuk Semua Pengguna
-- `/start` - Memulai bot dan menampilkan menu utama
-- `/register` - Mendaftar sebagai pengguna baru
-- `/login` - Login ke akun Anda
-- `/help` - Menampilkan bantuan
+### Installation
 
-#### Perintah untuk Pengguna Terdaftar
-- `/wallet` - Mengelola saldo dan melakukan top-up
-- `/topup` - Shortcut untuk menu top-up saldo
-- `/auto_order` - Membuat VPS secara otomatis dengan saldo
-- `/order` - Shortcut untuk auto_order
+1. Clone the repository
+```bash
+git clone https://github.com/yourusername/DigiBot.git
+cd DigiBot
+```
 
-#### Perintah untuk Admin
-- `/add_do` - Menambahkan akun DigitalOcean
-- `/sett_do` - Mengelola akun DigitalOcean
-- `/bath_do` - Uji akun batch
-- `/add_vps` - Membuat droplet
-- `/sett_vps` - Mengelola droplet
+2. Install dependencies
+```bash
+pip install -r requirements.txt
+```
 
-### 💵 Alur Auto Order
+3. Configure the bot
+- Copy `config.example.json` to `config.json`
+- Update the configuration:
+  ```json
+  {
+    "BOT": {
+      "NAME": "DigiBot",
+      "TOKEN": "YOUR_BOT_TOKEN",
+      "ADMINS": ["YOUR_TELEGRAM_ID"],
+      "MULTI_USER": true,
+      "PAYMENT_CONFIG": {
+        "CALLBACK_URL": "YOUR_CALLBACK_URL",
+        "USE_SIMULATION": false,
+        "CURRENCY": "IDR",
+        "DATA_QRIS": "YOUR_QRIS_DATA",
+        "MERCHANT_ID": "YOUR_MERCHANT_ID",
+        "API_KEY": "YOUR_API_KEY",
+        "CHECK_INTERVAL": 5,
+        "EXPIRE_TIME": 30
+      }
+    }
+  }
+  ```
 
-1. Pengguna mendaftar melalui perintah `/register`
-2. Pengguna top-up saldo melalui menu Wallet
-3. Setelah saldo mencukupi, pengguna dapat membuat VPS melalui menu Auto Order
-4. Sistem mengecek saldo dan mengurangi saldo sesuai harga VPS
-5. VPS dibuat dan ditambahkan ke akun pengguna
+4. Run the bot
+```bash
+python main.py
+```
 
-### 💰 Alur Top-Up Saldo
+## Bot Commands
 
-1. Pengguna memilih menu Wallet
-2. Pilih opsi Top-Up dan pilih nominal
-3. Pengguna diarahkan untuk melakukan pembayaran
-4. Setelah pembayaran berhasil, saldo akan otomatis bertambah
+### Public Commands
+- `/start` - Start the bot
+- `/register` - Register new account
+- `/login` - Login to existing account
+- `/help` - Show help message
 
-### 💻 Harga VPS (Konfigurasi Default)
+### User Commands
+- `/wallet` - Check wallet balance and top up
+- `/topup` - Top up wallet via QRIS
+- `/order` - Order new VPS
+- `/auto_order` - Automatic VPS ordering
 
-- s-1vcpu-1gb: Rp 70.000
-- s-1vcpu-2gb: Rp 140.000
-- s-2vcpu-2gb: Rp 210.000
-- s-2vcpu-4gb: Rp 280.000
-- s-4vcpu-8gb: Rp 560.000
+### Admin Commands
+- `/add_do` - Add DigitalOcean account
+- `/sett_do` - Manage DO accounts
+- `/bath_do` - Batch test DO accounts
+- `/add_vps` - Create new droplet
+- `/sett_vps` - Manage droplets
+- `/edit_vps_price` - Edit VPS prices
 
-### 🛠️ Catatan Pengembangan
+## Project Structure
+```
+DigiBot/
+├── bot.py              # Main bot logic
+├── _bot.py            # Bot configuration
+├── main.py            # Entry point
+├── config.json        # Configuration file
+├── requirements.txt   # Python dependencies
+├── data/             # Data storage
+│   └── vps_prices.json
+└── modules/          # Bot modules
+    ├── __init__.py
+    ├── admin_tools.py
+    ├── auth.py
+    ├── auto_order.py
+    ├── payment_gateway.py
+    ├── register.py
+    ├── start.py
+    └── wallet.py
+```
 
-- Payment gateway saat ini menggunakan simulasi. Untuk menghubungkan ke payment gateway yang sebenarnya, perbarui modules/payment_gateway.py
-- Untuk mengubah harga VPS, edit variabel DROPLET_PRICES di modules/auto_order.py
-- Aktifkan atau nonaktifkan mode multi-user melalui konfigurasi "MULTI_USER" di config.json
+## Contributing
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-### 🤖 Identitas Bot
+## License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-+ **Nama Bot**: DigitalOcean Manager Bot
-+ **Deskripsi**: Bot ini membantu Anda mengelola akun DigitalOcean, memeriksa saldo, membuat dan mengelola droplet, serta memberikan informasi detail tentang akun dan droplet Anda. Mendukung fitur multi-user dan auto order.
-+ **Versi**: 2.0.0
-+ **Bahasa Pemrograman**: Python
-+ **Perpustakaan Utama**: `pyTelegramBotAPI`, `digitalocean`, `tinydb`
-+ **Lisensi**: MIT License
+## Support
+For support, please contact [@yha_bot](https://t.me/yha_bot) on Telegram.

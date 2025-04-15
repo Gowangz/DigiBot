@@ -19,14 +19,26 @@ from utils.password_generator import password_generator
 from modules.register import check_auth
 from modules.wallet import show_wallet
 
+import json
+import os
+
 # Harga tier (dalam rupiah)
-DROPLET_PRICES = {
-    's-1vcpu-1gb': 70000,
-    's-1vcpu-2gb': 140000,
-    's-2vcpu-2gb': 210000,
-    's-2vcpu-4gb': 280000,
-    's-4vcpu-8gb': 560000,
-}
+def load_droplet_prices():
+    prices_file = os.path.join('data', 'vps_prices.json')
+    try:
+        with open(prices_file, 'r') as f:
+            prices = json.load(f)
+    except Exception:
+        prices = {
+            's-1vcpu-1gb': 70000,
+            's-1vcpu-2gb': 140000,
+            's-2vcpu-2gb': 210000,
+            's-2vcpu-4gb': 280000,
+            's-4vcpu-8gb': 560000,
+        }
+    return prices
+
+DROPLET_PRICES = load_droplet_prices()
 
 # Data sementara untuk auto order
 auto_order_dict = {}
@@ -210,7 +222,9 @@ def select_size(call: CallbackQuery, data: dict):
     
     for size in sizes:
         if region_slug in size.regions and size.slug in DROPLET_PRICES:
-            price = DROPLET_PRICES[size.slug]
+            # Reload prices to get latest updates
+            DROPLET_PRICES = load_droplet_prices()
+            price = DROPLET_PRICES.get(size.slug, 70000)
             if balance >= price:
                 label = f"{size.slug} - Rp {price:,}"
             else:
@@ -261,11 +275,9 @@ def check_balance(call: CallbackQuery, data: dict):
     balance = user_data.get('balance', 0)
     
     # Hitung harga VPS
-    if size_slug in DROPLET_PRICES:
-        price = DROPLET_PRICES[size_slug]
-    else:
-        # Jika ukuran tidak ada dalam daftar harga, gunakan harga default
-        price = 70000  # Harga default untuk size yang tidak dikenal
+    # Reload prices to get latest updates
+    DROPLET_PRICES = load_droplet_prices()
+    price = DROPLET_PRICES.get(size_slug, 70000)
     
     # Simpan harga untuk digunakan nanti
     auto_order_dict[user_id]['price'] = price

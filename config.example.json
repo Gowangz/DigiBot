@@ -1,0 +1,18 @@
+{
+    "BOT": {
+        "NAME": "DigiBot",
+        "TOKEN": "YOUR_BOT_TOKEN",
+        "ADMINS": ["YOUR_TELEGRAM_ID"],
+        "MULTI_USER": true,
+        "PAYMENT_CONFIG": {
+            "CALLBACK_URL": "https://your-gateway.com/api/mutasi/qris",
+            "USE_SIMULATION": false,
+            "CURRENCY": "IDR",
+            "DATA_QRIS": "YOUR_QRIS_DATA",
+            "MERCHANT_ID": "YOUR_MERCHANT_ID",
+            "API_KEY": "YOUR_API_KEY",
+            "CHECK_INTERVAL": 5,
+            "EXPIRE_TIME": 30
+        }
+    }
+}

@@ -1,141 +1,147 @@
-from tinydb import TinyDB, Query, where
-from datetime import datetime
 import json
-import os
-
-db_file = 'db.json'
-
+from typing import Dict, Any, Optional, List
+from tinydb import TinyDB, Query
+from datetime import datetime
 
 class UsersDB:
-    """Database untuk mengelola informasi pengguna."""
-
     def __init__(self):
-        db = TinyDB(db_file)
-        self.users = db.table('Users')
+        self.db = TinyDB('users.json')
         self.User = Query()
 
-    def register(self, user_id: int, username: str, first_name: str):
-        """Mendaftarkan pengguna baru."""
-        if self.get_by_id(user_id):
-            raise Exception('Pengguna sudah terdaftar')
+    def get_by_id(self, user_id: int) -> Optional[Dict[str, Any]]:
+        """Get user by ID."""
+        return self.db.get(self.User.id == user_id)
         
-        self.users.insert({
-            'user_id': user_id,
+    def register(self, user_id: int, username: str, first_name: str) -> None:
+        """Register a new user."""
+        # Check if user already exists
+        if self.get_by_id(user_id):
+            raise Exception("User already registered")
+            
+        # Create new user data
+        user_data = {
+            'id': user_id,
             'username': username,
             'first_name': first_name,
             'balance': 0,
-            'is_admin': False,
-            'created_at': datetime.today().strftime('%Y-%m-%d %H:%M:%S'),
-            'last_login': datetime.today().strftime('%Y-%m-%d %H:%M:%S')
-        })
+            'transactions': [],
+            'created_at': datetime.now().timestamp()
+        }
         
-    def get_by_id(self, user_id: int):
-        """Mendapatkan data pengguna berdasarkan ID."""
-        return self.users.get(self.User.user_id == user_id)
-    
-    def update_balance(self, user_id: int, amount: float):
-        """Menambah atau mengurangi saldo pengguna."""
+        # Insert new user
+        self.db.insert(user_data)
+
+    def get_balance(self, user_id: int) -> int:
+        """Get user balance."""
         user = self.get_by_id(user_id)
         if not user:
-            raise Exception('Pengguna tidak ditemukan')
+            raise Exception("User not found")
+        return user.get('balance', 0)
+
+    def update_balance(self, user_id: int, amount: int) -> int:
+        """Update user balance and return new balance."""
+        user = self.get_by_id(user_id)
+        if not user:
+            raise Exception("User not found")
         
         current_balance = user.get('balance', 0)
         new_balance = current_balance + amount
         
         if new_balance < 0:
-            raise Exception('Saldo tidak mencukupi')
+            raise Exception("Insufficient balance")
         
-        self.users.update({'balance': new_balance}, self.User.user_id == user_id)
-        
-        # Menambahkan transaksi ke dalam tabel Transactions
-        TransactionsDB().add(user_id, amount, "topup" if amount > 0 else "purchase")
-        
+        self.db.update({'balance': new_balance}, self.User.id == user_id)
         return new_balance
-    
-    def get_all_users(self):
-        """Mendapatkan semua pengguna."""
-        return self.users.all()
-    
-    def make_admin(self, user_id: int):
-        """Menjadikan pengguna sebagai admin."""
-        self.users.update({'is_admin': True}, self.User.user_id == user_id)
-    
-    def update_last_login(self, user_id: int):
-        """Memperbarui waktu login terakhir."""
-        self.users.update(
-            {'last_login': datetime.today().strftime('%Y-%m-%d %H:%M:%S')}, 
-            self.User.user_id == user_id
-        )
 
+    def update_user(self, user_id: int, data: Dict[str, Any]) -> None:
+        """Update user data."""
+        user = self.get_by_id(user_id)
+        if not user:
+            raise Exception("User not found")
+        
+        # Merge existing data with new data
+        updated_data = {**user, **data}
+        self.db.update(updated_data, self.User.id == user_id)
+
+    def add_transaction(self, user_id: int, transaction: Dict[str, Any]) -> None:
+        """Add transaction to user history."""
+        user = self.get_by_id(user_id)
+        if not user:
+            raise Exception("User not found")
+        
+        # Validate transaction data
+        required_fields = ['type', 'amount', 'status']
+        for field in required_fields:
+            if field not in transaction:
+                raise Exception(f"Missing required transaction field: {field}")
+        
+        # Get existing transactions or create empty list
+        transactions = user.get('transactions', [])
+        
+        # Add new transaction
+        transactions.append({
+            **transaction,
+            'timestamp': datetime.now().timestamp()
+        })
+        
+        # Update user with new transactions
+        self.update_user(user_id, {'transactions': transactions})
+
+    def get_transactions(self, user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get user transactions with limit."""
+        user = self.get_by_id(user_id)
+        if not user:
+            raise Exception("User not found")
+        
+        transactions = user.get('transactions', [])
+        
+        # Sort by timestamp (newest first) and limit
+        return sorted(
+            transactions,
+            key=lambda x: x.get('timestamp', 0),
+            reverse=True
+        )[:limit]
 
 class TransactionsDB:
-    """Database untuk mengelola transaksi."""
-
     def __init__(self):
-        db = TinyDB(db_file)
-        self.transactions = db.table('Transactions')
-    
-    def add(self, user_id: int, amount: float, type_: str, details: str = "", reference_id: str = ""):
-        """
-        Menambahkan transaksi baru.
+        self.db = TinyDB('transactions.json')
+        self.Transaction = Query()
         
-        :param user_id: ID pengguna
-        :param amount: Jumlah transaksi (positif untuk topup, negatif untuk purchase)
-        :param type_: Jenis transaksi ('topup', 'purchase', 'refund', dll)
-        :param details: Detail tambahan tentang transaksi
-        :param reference_id: ID referensi eksternal (misalnya dari payment gateway)
-        """
-        self.transactions.insert({
+    def add(self, user_id: int, amount: int, type_: str, details: str = None) -> None:
+        """Add a new transaction."""
+        transaction = {
             'user_id': user_id,
             'amount': amount,
             'type': type_,
             'details': details,
-            'reference_id': reference_id,
-            'timestamp': datetime.today().strftime('%Y-%m-%d %H:%M:%S')
-        })
-    
-    def get_by_user(self, user_id: int):
-        """Mendapatkan semua transaksi untuk pengguna tertentu."""
-        Transaction = Query()
-        return self.transactions.search(Transaction.user_id == user_id)
-    
-    def get_by_reference(self, reference_id: str):
-        """Mendapatkan transaksi berdasarkan ID referensi."""
-        Transaction = Query()
-        return self.transactions.get(Transaction.reference_id == reference_id)
-
+            'timestamp': datetime.now().timestamp()
+        }
+        self.db.insert(transaction)
+        
+    def get_by_user(self, user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get transactions for a specific user."""
+        transactions = self.db.search(self.Transaction.user_id == user_id)
+        return sorted(
+            transactions,
+            key=lambda x: x.get('timestamp', 0),
+            reverse=True
+        )[:limit]
 
 class UserDropletsDB:
-    """Database untuk mengelola droplet pengguna."""
-
     def __init__(self):
-        db = TinyDB(db_file)
-        self.user_droplets = db.table('UserDroplets')
+        self.db = TinyDB('user_droplets.json')
         self.UserDroplet = Query()
-    
-    def add(self, user_id: int, doc_id: int, droplet_id: int):
-        """Menambahkan droplet ke daftar droplet pengguna."""
-        self.user_droplets.insert({
+        
+    def add(self, user_id: int, doc_id: int, droplet_id: int) -> None:
+        """Add a new droplet association."""
+        data = {
             'user_id': user_id,
-            'account_doc_id': doc_id,
+            'doc_id': doc_id,
             'droplet_id': droplet_id,
-            'created_at': datetime.today().strftime('%Y-%m-%d %H:%M:%S')
-        })
-    
-    def get_by_user(self, user_id: int):
-        """Mendapatkan semua droplet untuk pengguna tertentu."""
-        return self.user_droplets.search(self.UserDroplet.user_id == user_id)
-    
-    def get_droplet(self, user_id: int, droplet_id: int):
-        """Mendapatkan detail droplet berdasarkan ID."""
-        return self.user_droplets.get(
-            (self.UserDroplet.user_id == user_id) & 
-            (self.UserDroplet.droplet_id == droplet_id)
-        )
-    
-    def remove(self, user_id: int, droplet_id: int):
-        """Menghapus droplet dari daftar droplet pengguna."""
-        self.user_droplets.remove(
-            (self.UserDroplet.user_id == user_id) & 
-            (self.UserDroplet.droplet_id == droplet_id)
-        )
+            'created_at': datetime.now().timestamp()
+        }
+        self.db.insert(data)
+        
+    def get_by_user(self, user_id: int) -> List[Dict[str, Any]]:
+        """Get all droplets for a specific user."""
+        return self.db.search(self.UserDroplet.user_id == user_id)

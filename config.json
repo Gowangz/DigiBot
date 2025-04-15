@@ -1,14 +1,18 @@
 {
-  "BOT": {
-    "NAME": "NAMA STORE",
-    "TOKEN": "BOT TOKEN",
-    "ADMINS": [ID TELEGRAM
-    ],
-    "PAYMENT_CONFIG": {
-      "CALLBACK_URL": "https://your-callback-url.com/payment/webhook",
-      "USE_SIMULATION": true,
-      "CURRENCY": "IDR"
-    },
-    "MULTI_USER": true
-  }
+    "BOT": {
+        "NAME": "DigiBot",
+        "TOKEN": "7521736518:AAFVUuxa7FdeSADdL_fNnTD0LVMrYNXFPJk",
+        "ADMINS": ["1901832020"],
+        "MULTI_USER": true,
+        "PAYMENT_CONFIG": {
+            "CALLBACK_URL": "https://gateway.okeconnect.com/api/mutasi/qris",
+            "USE_SIMULATION": false,
+            "CURRENCY": "IDR",
+            "DATA_QRIS": "00020101021126670016COM.NOBUBANK.WWW01189360050300000879140214548491698002380303UMI51440014ID.CO.QRIS.WWW0215ID20253900662770303UMI5204541153033605802ID5921ILHAM STORE OK22197306006MALANG61056511162070703A0163041838",
+            "MERCHANT_ID": "OK2219730",
+            "API_KEY": "658775817443792902219730OKCTC898A9B892C33AED7CE4DC0D2122220E",
+            "CHECK_INTERVAL": 5,
+            "EXPIRE_TIME": 30
+        }
+    }
 }
