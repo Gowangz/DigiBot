@@ -1,0 +1,14 @@
+{
+  "BOT": {
+    "NAME": "NAMA STORE",
+    "TOKEN": "BOT TOKEN",
+    "ADMINS": [ID TELEGRAM
+    ],
+    "PAYMENT_CONFIG": {
+      "CALLBACK_URL": "https://your-callback-url.com/payment/webhook",
+      "USE_SIMULATION": true,
+      "CURRENCY": "IDR"
+    },
+    "MULTI_USER": true
+  }
+}
