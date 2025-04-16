@@ -44,7 +44,7 @@ A Telegram bot for managing DigitalOcean VPS instances with integrated payment s
 
 1. Clone the repository
 ```bash
-git clone https://github.com/yourusername/DigiBot.git
+git clone https://github.com/Gowangz/DigiBot.git
 cd DigiBot
 ```
 
